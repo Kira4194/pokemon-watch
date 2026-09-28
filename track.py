@@ -14,6 +14,15 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
+import urllib.request
+
+# Se présenter comme un navigateur pour éviter les erreurs 403
+_opener = urllib.request.build_opener()
+_opener.addheaders = [
+    ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"),
+    ("Accept", "application/json"),
+]
+urllib.request.install_opener(_opener)
 
 CARDS_FILE = Path("cards.csv")
 HISTORY_FILE = Path("history.csv")
