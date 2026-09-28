@@ -1,8 +1,13 @@
-"""Veille des prix de cartes Pokémon (API Pokémon TCG), tout en euros.
+"""Veille des prix de cartes Pokémon, tout en euros.
 
 - Chaque jour : vérifie les prix cibles de chaque carte (alerte Telegram immédiate).
 - Le lundi et le jeudi : envoie le récapitulatif des prix + variation en %
-  par rapport au dernier récapitulatif envoyé.
+  par rapport au dernier récapitulatif envoyé, avec le prix PSA 10.
+
+Sources de prix, dans l'ordre :
+1. API Pokémon TCG (Cardmarket en € + TCGplayer en $)
+2. TCGdex (secours si la 1re n'a pas encore de prix pour la carte)
+3. PokemonPriceTracker (second secours, prix TCGplayer, nécessite une clé)
 """
 import csv
 import json
@@ -14,21 +19,13 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
-import urllib.request
-
-# Se présenter comme un navigateur pour éviter les erreurs 403
-_opener = urllib.request.build_opener()
-_opener.addheaders = [
-    ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"),
-    ("Accept", "application/json"),
-]
-urllib.request.install_opener(_opener)
 
 CARDS_FILE = Path("cards.csv")
 HISTORY_FILE = Path("history.csv")
 STATE_FILE = Path("state.json")
 SUMMARY_DAYS = {0, 3}  # 0 = lundi, 3 = jeudi
 API_URL = "https://api.pokemontcg.io/v2/cards/"
+TCGDEX_URL = "https://api.tcgdex.net/v2/en/cards"
 FX_URL = "https://api.frankfurter.app/latest?from=USD&to=EUR"
 
 API_KEY = os.environ.get("POKEMONTCG_API_KEY", "")
@@ -86,7 +83,7 @@ def get_usd_eur_rate():
         return None
 
 
-# ---------- API Pokémon TCG ----------
+# ---------- Source 1 : API Pokémon TCG ----------
 def api_get(url):
     headers = {"X-Api-Key": API_KEY} if API_KEY else {}
     req = urllib.request.Request(url, headers=headers)
@@ -137,18 +134,60 @@ def extract_prices_eur(card, usd_eur):
     return prices
 
 
-def platform_info(card, source):
-    """Plateforme, lien et date de mise à jour correspondant à une source de prix."""
-    if source.startswith("Cardmarket"):
-        data = card.get("cardmarket") or {}
-        name = "Cardmarket (Europe, prix en euros)"
-    else:
-        data = card.get("tcgplayer") or {}
-        name = "TCGplayer (États-Unis, prix en dollars convertis en euros)"
-    return name, data.get("url"), data.get("updatedAt")
+# ---------- Source 2 : TCGdex (secours, gratuit, sans clé) ----------
+def tcgdex_get(url):
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as resp:
+                return json.load(resp)
+        except Exception as exc:
+            print(f"TCGdex : tentative {attempt + 1} échouée ({url}) : {exc}")
+            time.sleep(3 * (attempt + 1))
+    return None
 
 
-# ---------- PSA 10 (PokemonPriceTracker, ventes eBay) ----------
+def tcgdex_prices(card, usd_eur):
+    """Prix en euros depuis TCGdex. Complète aussi card[...] avec la date de mise à jour."""
+    name = card.get("name", "")
+    number = str(card.get("number", "")).lstrip("0")
+    set_name = ((card.get("set") or {}).get("name") or "").lower()
+    if not name or not number:
+        return {}
+    listing = tcgdex_get(TCGDEX_URL + "?" + urllib.parse.urlencode({"name": name}))
+    for brief in listing or []:
+        if str(brief.get("localId", "")).lstrip("0") != number:
+            continue
+        detail = tcgdex_get(TCGDEX_URL + "/" + urllib.parse.quote(str(brief.get("id", ""))))
+        if not detail:
+            continue
+        found_set = ((detail.get("set") or {}).get("name") or "").lower()
+        if not (set_name in found_set or found_set in set_name):
+            continue
+        pricing = detail.get("pricing") or {}
+        prices = {}
+        cm = pricing.get("cardmarket") or {}
+        if cm.get("unit", "EUR") == "EUR":
+            trend = cm.get("trend-holo") or cm.get("trend")
+            avg30 = cm.get("avg30-holo") or cm.get("avg30")
+            if trend:
+                prices["Cardmarket tendance"] = float(trend)
+            if avg30:
+                prices["Cardmarket moyenne 30 j"] = float(avg30)
+            card["cardmarket"] = {"updatedAt": str(cm.get("updated", ""))[:10]}
+        tp = pricing.get("tcgplayer") or {}
+        if usd_eur:
+            for variant, data in tp.items():
+                if isinstance(data, dict) and data.get("marketPrice"):
+                    prices[f"TCGplayer {variant} (converti)"] = float(data["marketPrice"]) * usd_eur
+            if tp:
+                card["tcgplayer"] = {"updatedAt": str(tp.get("updated", ""))[:10]}
+        if prices:
+            print(f"Prix trouvés via TCGdex pour {name} {number}")
+        return prices
+    return {}
+
+
+# ---------- Source 3 : PokemonPriceTracker (PSA 10 + prix de secours) ----------
 def ppt_get(params):
     url = PPT_URL + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {PPT_KEY}"})
@@ -166,31 +205,59 @@ def ppt_get(params):
     return None
 
 
-def get_psa10_line(state, card, card_id, usd_eur):
-    """Retourne une ligne de texte sur le prix PSA 10 (ventes eBay), en euros."""
+_ppt_cache = {}
+
+
+def ppt_card(state, card, card_id):
+    """Fiche PokemonPriceTracker avec ventes eBay. Retourne (données, problème)."""
+    if card_id not in _ppt_cache:
+        _ppt_cache[card_id] = _ppt_lookup(state, card, card_id)
+    return _ppt_cache[card_id]
+
+
+def _ppt_lookup(state, card, card_id):
     if not PPT_KEY:
-        return " • PSA 10 : clé PokemonPriceTracker non ajoutée dans les secrets GitHub"
+        return None, "nokey"
     ppt_id = state["ppt_ids"].get(card_id)
     if not ppt_id:
         number = str(card.get("number", "")).lstrip("0")
         set_name = (card.get("set") or {}).get("name", "")
         results = ppt_get({"search": f"{card.get('name', '')} {set_name}", "limit": 10})
         if results is None:
-            return " • PSA 10 : indisponible aujourd'hui (clé refusée ou quota atteint)"
+            return None, "refused"
         for r in results:
             same_number = str(r.get("cardNumber", "")).split("/")[0].lstrip("0") == number
-            if same_number and "30th" in str(r.get("setName", "")).lower():
+            same_set = set_name.lower() in str(r.get("setName", "")).lower()
+            if same_number and same_set:
                 ppt_id = r.get("tcgPlayerId")
                 break
         if not ppt_id:
-            return " • PSA 10 : carte introuvable chez PokemonPriceTracker"
+            return None, "notfound"
         state["ppt_ids"][card_id] = ppt_id
-
     data = ppt_get({"tcgPlayerId": ppt_id, "includeEbay": "true"})
     if data is None:
+        return None, "refused"
+    return (data[0] if data else {}), None
+
+
+def ppt_market_prices(state, card, card_id, usd_eur):
+    data, problem = ppt_card(state, card, card_id)
+    market = ((data or {}).get("prices") or {}).get("market")
+    if problem or not market or not usd_eur:
+        return {}
+    return {"TCGplayer (via PokemonPriceTracker, converti)": float(market) * usd_eur}
+
+
+def get_psa10_line(state, card, card_id, usd_eur):
+    """Une ligne de texte sur le prix PSA 10 (ventes eBay), en euros."""
+    data, problem = ppt_card(state, card, card_id)
+    if problem == "nokey":
+        return " • PSA 10 : clé PokemonPriceTracker non ajoutée dans les secrets GitHub"
+    if problem == "refused":
         return " • PSA 10 : indisponible aujourd'hui (clé refusée ou quota atteint)"
-    ebay = (data[0].get("ebay") or {}) if data else {}
-    psa10 = (ebay.get("salesByGrade") or {}).get("psa10") or {}
+    if problem == "notfound":
+        return " • PSA 10 : carte introuvable chez PokemonPriceTracker"
+    psa10 = ((data.get("ebay") or {}).get("salesByGrade") or {}).get("psa10") or {}
     price_usd = psa10.get("medianPrice") or psa10.get("averagePrice")
     if not price_usd or not psa10.get("count"):
         return " • PSA 10 : pas encore de ventes eBay enregistrées"
@@ -204,6 +271,7 @@ def get_psa10_line(state, card, card_id, usd_eur):
     return line + (f", dernière le {last})" if last else ")")
 
 
+# ---------- Liens et plateformes ----------
 def ebay_psa10_link(card):
     set_info = card.get("set") or {}
     total = set_info.get("printedTotal")
@@ -211,6 +279,23 @@ def ebay_psa10_link(card):
     ref = f"{number}/{total}" if total else number
     query = urllib.parse.quote_plus(f"{card.get('name', '')} {ref} PSA 10")
     return f"https://www.ebay.fr/sch/i.html?_nkw={query}&LH_Sold=1&LH_Complete=1"
+
+
+def link_for(card, key):
+    url = (card.get(key) or {}).get("url")
+    if not url and key == "cardmarket":
+        query = urllib.parse.quote_plus(f"{card.get('name', '')} {card.get('number', '')}")
+        url = f"https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString={query}"
+    return url
+
+
+def platform_info(card, source):
+    """Plateforme, lien et date de mise à jour correspondant à une source de prix."""
+    if source.startswith("Cardmarket"):
+        key, name = "cardmarket", "Cardmarket (Europe, prix en euros)"
+    else:
+        key, name = "tcgplayer", "TCGplayer (États-Unis, prix en dollars convertis en euros)"
+    return name, link_for(card, key), (card.get(key) or {}).get("updatedAt")
 
 
 def reference_price(prices):
@@ -247,9 +332,20 @@ def main():
             problems.append(f"⚠️ {label} : carte introuvable ou API indisponible")
             continue
         card_id = card["id"]
+
+        # Prix : source 1, puis secours 2 et 3
+        fallback_note = None
         prices = extract_prices_eur(card, usd_eur)
         if not prices:
-            problems.append(f"⚠️ {label} : pas encore de prix disponible")
+            prices = tcgdex_prices(card, usd_eur)
+            if prices:
+                fallback_note = "ℹ️ Prix issus de TCGdex (l'API principale n'a pas encore de prix pour cette carte)."
+        if not prices:
+            prices = ppt_market_prices(state, card, card_id, usd_eur)
+            if prices:
+                fallback_note = "ℹ️ Prix TCGplayer issus de PokemonPriceTracker (les autres sources n'ont pas encore de prix)."
+        if not prices:
+            problems.append(f"⚠️ {label} : aucune source n'a encore de prix pour cette carte")
             continue
 
         for source, price in prices.items():
@@ -288,12 +384,16 @@ def main():
             else:
                 lines.append(f" • {source} : {fmt_eur(price)} (première mesure)")
         for name, key in (("Cardmarket", "cardmarket"), ("TCGplayer", "tcgplayer")):
-            url = (card.get(key) or {}).get("url")
+            if not any(src.startswith(name) for src in prices):
+                continue  # pas de lien vers une plateforme dont on n'a pas de prix
+            url = link_for(card, key)
             if url:
                 lines.append(f" 🔗 {name} : {url}")
         if send_summary:
             lines.append(get_psa10_line(state, card, card_id, usd_eur))
             lines.append(f" 🔗 Ventes eBay PSA 10 : {ebay_psa10_link(card)}")
+        if fallback_note:
+            lines.append(f" {fallback_note}")
         blocks.append(f"{label}\n" + "\n".join(lines))
         new_summary[card_id] = prices
         time.sleep(1)
@@ -314,9 +414,12 @@ def main():
     if send_summary:
         parts = [f"📊 Prix des cartes — {now.strftime('%d/%m/%Y')}"]
         if usd_eur is None:
-            parts.append("⚠️ Taux de change indisponible : prix TCGplayer ignorés cette fois.")
+            parts.append("⚠️ Taux de change indisponible : prix en dollars ignorés cette fois.")
         parts += blocks + problems
-        parts.append("Cardmarket = Europe (prix en €). TCGplayer = États-Unis (prix en $ convertis en €). PSA 10 = ventes eBay.\nVariations par rapport au dernier récapitulatif.")
+        parts.append(
+            "Cardmarket = Europe (prix en €). TCGplayer = États-Unis (prix en $ convertis en €). "
+            "PSA 10 = ventes eBay.\nVariations par rapport au dernier récapitulatif."
+        )
         send_telegram("\n\n".join(parts))
         state["summary"].update(new_summary)
 
