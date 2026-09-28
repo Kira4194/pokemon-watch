@@ -1,6 +1,20 @@
 {
-  "summary": {},
-  "targets": {},
+  "summary": {
+    "30th-154": {
+      "TCGplayer (via PokemonPriceTracker, converti)": 102.92575608000001
+    },
+    "30th-158": {
+      "TCGplayer (via PokemonPriceTracker, converti)": 80.40470824
+    },
+    "30th-153": {
+      "TCGplayer (via PokemonPriceTracker, converti)": 59.71064088000001
+    }
+  },
+  "targets": {
+    "30th-154": "between",
+    "30th-158": "between",
+    "30th-153": "between"
+  },
   "ppt_ids": {
     "30th-154": "717610",
     "30th-158": "696688",
