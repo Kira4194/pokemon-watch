@@ -18,16 +18,37 @@ TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
-def fetch_card(card_id):
+def api_get(url):
     headers = {"X-Api-Key": API_KEY} if API_KEY else {}
-    req = urllib.request.Request(API_URL + urllib.parse.quote(card_id), headers=headers)
+    req = urllib.request.Request(url, headers=headers)
     for attempt in range(4):  # l'API est parfois lente : on réessaie
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 return json.load(resp)["data"]
         except Exception as exc:
-            print(f"[{card_id}] tentative {attempt + 1} échouée : {exc}")
+            print(f"Tentative {attempt + 1} échouée ({url}) : {exc}")
             time.sleep(5 * (attempt + 1))
+    return None
+
+
+def fetch_card(row):
+    """Trouve la carte par id, ou par nom anglais + numéro + mot du set."""
+    card_id = (row.get("id") or "").strip()
+    if card_id:
+        return api_get(API_URL + urllib.parse.quote(card_id))
+
+    name = (row.get("nom_anglais") or "").strip()
+    number = (row.get("numero") or "").strip()
+    set_word = (row.get("mot_set") or "").strip().lower()
+    query = f'name:"{name}" number:{number}'
+    results = api_get(API_URL + "?" + urllib.parse.urlencode({"q": query, "pageSize": 30}))
+    for card in results or []:
+        card_set = card.get("set", {})
+        haystack = f"{card_set.get('name', '')} {card_set.get('id', '')}".lower()
+        if set_word in haystack:
+            print(f"Trouvé : {card['id']} ({card_set.get('name')})")
+            return card
+    print(f"Aucune carte trouvée pour {query} (set contenant '{set_word}')")
     return None
 
 
@@ -70,20 +91,20 @@ def main():
     new_rows, movers, overview = [], [], []
 
     with CARDS_FILE.open(newline="", encoding="utf-8") as f:
-        cards = [r for r in csv.DictReader(f) if r.get("id")]
+        cards = [r for r in csv.DictReader(f) if r.get("nom")]
 
     for row in cards:
-        card_id = row["id"].strip()
-        label = (row.get("nom") or card_id).strip()
+        label = row["nom"].strip()
         try:
             threshold = float(row.get("seuil_pct") or DEFAULT_THRESHOLD)
         except ValueError:
             threshold = DEFAULT_THRESHOLD
 
-        card = fetch_card(card_id)
+        card = fetch_card(row)
         if not card:
             overview.append(f"⚠️ {label} : introuvable ou API indisponible")
             continue
+        card_id = card["id"]
 
         for source, price in extract_prices(card).items():
             new_rows.append([today, card_id, label, source, price])
