@@ -2,8 +2,8 @@ name: Veille cartes Pokémon
 
 on:
   schedule:
-    - cron: "0 7 1,10,20 * *"   # les 1er, 10 et 20 de chaque mois à 7h UTC
-  workflow_dispatch:             # permet aussi de le lancer à la main
+    - cron: "0 7 * * *"   # tous les jours à 7h UTC (8h/9h en France) : vérifie les prix cibles
+  workflow_dispatch:       # permet aussi de le lancer à la main (envoie alors le récapitulatif)
 
 permissions:
   contents: write
@@ -22,6 +22,7 @@ jobs:
         run: python track.py
         env:
           POKEMONTCG_API_KEY: ${{ secrets.POKEMONTCG_API_KEY }}
+          POKEPRICETRACKER_API_KEY: ${{ secrets.POKEPRICETRACKER_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
@@ -29,6 +30,6 @@ jobs:
         run: |
           git config user.name "price-watch-bot"
           git config user.email "price-watch-bot@users.noreply.github.com"
-          git add history.csv
+          git add history.csv state.json
           git diff --cached --quiet || git commit -m "Mise à jour des prix $(date +%F)"
           git push
