@@ -1,2 +1,4 @@
-id,nom,seuil_pct
-base1-4,Dracaufeu Set de Base,10
+nom,nom_anglais,numero,mot_set,id,seuil_pct
+Ectoplasma ex 30e anniversaire 154/128,Gengar ex,154,30th,,10
+Mew ex 30e anniversaire 158/128,Mew ex,158,30th,,10
+Nymphali ex 30e anniversaire 153/128,Sylveon ex,153,30th,,10
