@@ -26,7 +26,11 @@ STATE_FILE = Path("state.json")
 SUMMARY_DAYS = {0, 3}  # 0 = lundi, 3 = jeudi
 API_URL = "https://api.pokemontcg.io/v2/cards/"
 TCGDEX_URL = "https://api.tcgdex.net/v2/en/cards"
-FX_URL = "https://api.frankfurter.app/latest?from=USD&to=EUR"
+FX_URLS = [
+    "https://api.frankfurter.app/latest?from=USD&to=EUR",
+    "https://open.er-api.com/v6/latest/USD",
+    "https://api.exchangerate-api.com/v4/latest/USD",
+]
 
 API_KEY = os.environ.get("POKEMONTCG_API_KEY", "")
 PPT_URL = "https://www.pokemonpricetracker.com/api/v2/cards"
@@ -75,12 +79,15 @@ def save_state(state):
 
 # ---------- Taux de change USD -> EUR ----------
 def get_usd_eur_rate():
-    try:
-        with urllib.request.urlopen(FX_URL, timeout=30) as resp:
-            return float(json.load(resp)["rates"]["EUR"])
-    except Exception as exc:
-        print(f"Taux de change indisponible : {exc}")
-        return None
+    """Essaie plusieurs services l'un après l'autre (une adresse GitHub partagée
+    peut se faire bloquer temporairement par l'un d'eux)."""
+    for url in FX_URLS:
+        try:
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                return float(json.load(resp)["rates"]["EUR"])
+        except Exception as exc:
+            print(f"Taux de change indisponible via {url} : {exc}")
+    return None
 
 
 # ---------- Source 1 : API Pokémon TCG ----------
