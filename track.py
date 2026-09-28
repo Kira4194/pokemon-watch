@@ -146,45 +146,65 @@ def tcgdex_get(url):
     return None
 
 
-def tcgdex_prices(card, usd_eur):
-    """Prix en euros depuis TCGdex. Complète aussi card[...] avec la date de mise à jour."""
-    name = card.get("name", "")
-    number = str(card.get("number", "")).lstrip("0")
-    set_name = ((card.get("set") or {}).get("name") or "").lower()
+def find_card_tcgdex(row):
+    """Trouve la carte et ses prix directement via TCGdex (source principale, sans clé)."""
+    name = (row.get("nom_anglais") or "").strip()
+    number = (row.get("numero") or "").strip()
+    set_word = (row.get("mot_set") or "").strip().lower()
     if not name or not number:
-        return {}
+        return None
     listing = tcgdex_get(TCGDEX_URL + "?" + urllib.parse.urlencode({"name": name}))
     for brief in listing or []:
-        if str(brief.get("localId", "")).lstrip("0") != number:
+        if str(brief.get("localId", "")).lstrip("0") != number.lstrip("0"):
             continue
         detail = tcgdex_get(TCGDEX_URL + "/" + urllib.parse.quote(str(brief.get("id", ""))))
         if not detail:
             continue
-        found_set = ((detail.get("set") or {}).get("name") or "").lower()
-        if not (set_name in found_set or found_set in set_name):
+        found_set = ((detail.get("set") or {}).get("name") or "")
+        if set_word and set_word not in found_set.lower():
             continue
+        card = {
+            "id": detail.get("id"),
+            "name": detail.get("name"),
+            "number": detail.get("localId"),
+            "set": {"name": found_set, "printedTotal": (detail.get("set") or {}).get("cardCount", {}).get("official")},
+        }
         pricing = detail.get("pricing") or {}
-        prices = {}
         cm = pricing.get("cardmarket") or {}
-        if cm.get("unit", "EUR") == "EUR":
-            trend = cm.get("trend-holo") or cm.get("trend")
-            avg30 = cm.get("avg30-holo") or cm.get("avg30")
-            if trend:
-                prices["Cardmarket tendance"] = float(trend)
-            if avg30:
-                prices["Cardmarket moyenne 30 j"] = float(avg30)
+        if cm:
             card["cardmarket"] = {"updatedAt": str(cm.get("updated", ""))[:10]}
         tp = pricing.get("tcgplayer") or {}
-        if usd_eur:
-            for variant, data in tp.items():
-                if isinstance(data, dict) and data.get("marketPrice"):
-                    prices[f"TCGplayer {variant} (converti)"] = float(data["marketPrice"]) * usd_eur
-            if tp:
-                card["tcgplayer"] = {"updatedAt": str(tp.get("updated", ""))[:10]}
-        if prices:
-            print(f"Prix trouvés via TCGdex pour {name} {number}")
-        return prices
-    return {}
+        if tp:
+            card["tcgplayer"] = {"updatedAt": str(tp.get("updated", ""))[:10]}
+        print(f"Trouvé via TCGdex : {card['id']} ({found_set})")
+        return card
+    print(f"TCGdex : carte introuvable pour {name} {number} (set contenant '{set_word}')")
+    return None
+
+
+def tcgdex_card_prices(row, usd_eur):
+    """Recherche + prix en un appel. Retourne (card, prices) ou (None, {})."""
+    card = find_card_tcgdex(row)
+    if not card:
+        return None, {}
+    listing_id = card["id"]
+    detail = tcgdex_get(TCGDEX_URL + "/" + urllib.parse.quote(str(listing_id)))
+    pricing = (detail or {}).get("pricing") or {}
+    prices = {}
+    cm = pricing.get("cardmarket") or {}
+    if cm.get("unit", "EUR") == "EUR":
+        trend = cm.get("trend-holo") or cm.get("trend")
+        avg30 = cm.get("avg30-holo") or cm.get("avg30")
+        if trend:
+            prices["Cardmarket tendance"] = float(trend)
+        if avg30:
+            prices["Cardmarket moyenne 30 j"] = float(avg30)
+    tp = pricing.get("tcgplayer") or {}
+    if usd_eur:
+        for variant, data in tp.items():
+            if isinstance(data, dict) and data.get("marketPrice"):
+                prices[f"TCGplayer {variant} (converti)"] = float(data["marketPrice"]) * usd_eur
+    return card, prices
 
 
 # ---------- Source 3 : PokemonPriceTracker (PSA 10 + prix de secours) ----------
@@ -327,19 +347,28 @@ def main():
 
     for row in cards:
         label = row["nom"].strip()
-        card = fetch_card(row)
+        fallback_note = None
+
+        # Source principale : TCGdex (gratuite, sans clé, activement maintenue)
+        card, prices = tcgdex_card_prices(row, usd_eur)
+
+        # Secours 1 : API Pokémon TCG (en fin de vie, gardée tant qu'elle répond)
+        if not card or not prices:
+            alt_card = fetch_card(row)
+            if alt_card:
+                card = card or alt_card
+                alt_prices = extract_prices_eur(alt_card, usd_eur)
+                if alt_prices and not prices:
+                    prices = alt_prices
+                    card = alt_card
+                    fallback_note = "ℹ️ Prix issus de l'API Pokémon TCG (en fin de vie, TCGdex n'avait pas encore de prix)."
+
         if not card:
-            problems.append(f"⚠️ {label} : carte introuvable ou API indisponible")
+            problems.append(f"⚠️ {label} : carte introuvable sur les sources disponibles")
             continue
         card_id = card["id"]
 
-        # Prix : source 1, puis secours 2 et 3
-        fallback_note = None
-        prices = extract_prices_eur(card, usd_eur)
-        if not prices:
-            prices = tcgdex_prices(card, usd_eur)
-            if prices:
-                fallback_note = "ℹ️ Prix issus de TCGdex (l'API principale n'a pas encore de prix pour cette carte)."
+        # Secours 2 : PokemonPriceTracker (prix TCGplayer, nécessite une clé)
         if not prices:
             prices = ppt_market_prices(state, card, card_id, usd_eur)
             if prices:
