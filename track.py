@@ -214,7 +214,10 @@ def ppt_get(params):
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
-                return json.load(resp).get("data") or []
+                data = json.load(resp).get("data")
+                if isinstance(data, dict):  # l'API renvoie parfois un objet seul plutôt qu'une liste
+                    data = [data]
+                return data or []
         except urllib.error.HTTPError as exc:
             print(f"PokemonPriceTracker : erreur HTTP {exc.code} ({params})")
             if exc.code in (401, 403, 429):  # clé refusée / accès non inclus / quota
@@ -257,7 +260,9 @@ def _ppt_lookup(state, card, card_id):
     data = ppt_get({"tcgPlayerId": ppt_id, "includeEbay": "true"})
     if data is None:
         return None, "refused"
-    return (data[0] if data else {}), None
+    if not data:
+        return {}, None
+    return (data[0] if isinstance(data, list) else data), None
 
 
 def ppt_market_prices(state, card, card_id, usd_eur):
@@ -370,9 +375,12 @@ def main():
 
         # Secours 2 : PokemonPriceTracker (prix TCGplayer, nécessite une clé)
         if not prices:
-            prices = ppt_market_prices(state, card, card_id, usd_eur)
-            if prices:
-                fallback_note = "ℹ️ Prix TCGplayer issus de PokemonPriceTracker (les autres sources n'ont pas encore de prix)."
+            try:
+                prices = ppt_market_prices(state, card, card_id, usd_eur)
+                if prices:
+                    fallback_note = "ℹ️ Prix TCGplayer issus de PokemonPriceTracker (les autres sources n'ont pas encore de prix)."
+            except Exception as exc:
+                print(f"PokemonPriceTracker (prix) : erreur inattendue ignorée : {exc}")
         if not prices:
             problems.append(f"⚠️ {label} : aucune source n'a encore de prix pour cette carte")
             continue
@@ -419,7 +427,11 @@ def main():
             if url:
                 lines.append(f" 🔗 {name} : {url}")
         if send_summary:
-            lines.append(get_psa10_line(state, card, card_id, usd_eur))
+            try:
+                lines.append(get_psa10_line(state, card, card_id, usd_eur))
+            except Exception as exc:
+                print(f"PSA 10 : erreur inattendue ignorée : {exc}")
+                lines.append(" • PSA 10 : indisponible aujourd'hui (erreur inattendue)")
             lines.append(f" 🔗 Ventes eBay PSA 10 : {ebay_psa10_link(card)}")
         if fallback_note:
             lines.append(f" {fallback_note}")
