@@ -1,23 +1,35 @@
 {
   "summary": {
     "30th-154": {
-      "TCGplayer (via PokemonPriceTracker, converti)": 66.8000835
+      "TCGplayer (via PokemonPriceTracker, converti)": 63.22503474
     },
     "30th-158": {
-      "TCGplayer (via PokemonPriceTracker, converti)": 53.72451159999999
+      "TCGplayer (via PokemonPriceTracker, converti)": 53.4133341
     },
     "30th-153": {
-      "TCGplayer (via PokemonPriceTracker, converti)": 39.751160799999994
+      "TCGplayer (via PokemonPriceTracker, converti)": 40.60657629
+    },
+    "30th-152": {
+      "TCGplayer (via PokemonPriceTracker, converti)": 78.49360512
+    },
+    "me05-116": {
+      "Cardmarket tendance": 183.08,
+      "Cardmarket moyenne 30 j": 213.48,
+      "TCGplayer holofoil (converti)": 143.43390999
     }
   },
   "targets": {
     "30th-154": "between",
     "30th-158": "between",
-    "30th-153": "between"
+    "30th-153": "between",
+    "30th-152": "between",
+    "me05-116": "between"
   },
   "ppt_ids": {
     "30th-154": "717610",
     "30th-158": "696688",
-    "30th-153": "716231"
+    "30th-153": "716231",
+    "30th-152": "717605",
+    "me05-116": "704873"
   }
 }
