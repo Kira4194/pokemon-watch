@@ -4,7 +4,7 @@ name: Test des sources de prix
 on:
   push:
     branches: [test-sources]
-    paths: [test_sources.py, test_mapping.py, .github/workflows/test-sources.yml]
+    paths: [test_sources.py, test_mapping.py, test_planb.py, .github/workflows/test-sources.yml]
   workflow_dispatch:
 
 permissions:
@@ -20,14 +20,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Tester la correspondance cartes → Cardmarket
-        run: python test_mapping.py
+      - name: Tester le plan B (choix de version)
+        run: python test_planb.py
 
       - name: Enregistrer le rapport
         run: |
-          cat test_mapping_report.md >> "$GITHUB_STEP_SUMMARY"
+          cat test_planb_report.md >> "$GITHUB_STEP_SUMMARY"
           git config user.name "price-watch-bot"
           git config user.email "price-watch-bot@users.noreply.github.com"
-          git add test_mapping_report.md
+          git add test_planb_report.md
           git diff --cached --quiet || git commit -m "Rapport du test des sources $(date +%F)"
           git push
