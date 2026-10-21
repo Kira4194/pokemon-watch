@@ -131,6 +131,8 @@ def extract_prices_eur(card, usd_eur):
     cm = (card.get("cardmarket") or {}).get("prices") or {}
     if cm.get("trendPrice"):
         prices["Cardmarket tendance"] = float(cm["trendPrice"])
+    if cm.get("avg7"):
+        prices["Cardmarket moyenne 7 j"] = float(cm["avg7"])
     if cm.get("avg30"):
         prices["Cardmarket moyenne 30 j"] = float(cm["avg30"])
     if usd_eur:
@@ -202,6 +204,9 @@ def tcgdex_card_prices(row, usd_eur):
     if cm.get("unit", "EUR") == "EUR":
         trend = cm.get("trend-holo") or cm.get("trend")
         avg30 = cm.get("avg30-holo") or cm.get("avg30")
+        avg7 = cm.get("avg7-holo") or cm.get("avg7")
+        if avg7:
+            prices["Cardmarket moyenne 7 j"] = float(avg7)
         if trend:
             prices["Cardmarket tendance"] = float(trend)
         if avg30:
@@ -331,7 +336,9 @@ def platform_info(card, source):
 
 
 def reference_price(prices):
-    """Prix utilisé pour les prix cibles : Cardmarket tendance, sinon TCGplayer converti."""
+    """Prix utilisé pour les prix cibles : Cardmarket moyenne 7 j, sinon tendance, sinon TCGplayer converti."""
+    if "Cardmarket moyenne 7 j" in prices:
+        return "Cardmarket moyenne 7 j", prices["Cardmarket moyenne 7 j"]
     if "Cardmarket tendance" in prices:
         return "Cardmarket tendance", prices["Cardmarket tendance"]
     tcg = {k: v for k, v in prices.items() if k.startswith("TCGplayer")}
