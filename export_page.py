@@ -4,8 +4,8 @@ Ce script ne cherche aucun prix : il relit seulement ce que track.py a déjà
 enregistré, et produit page.json, que Claude recopie tel quel sur la page.
 
 Pour chaque carte, le prix retenu est le même que pour les alertes Telegram
-(fonction reference_price de track.py) : Cardmarket tendance s'il existe,
-sinon TCGplayer converti en euros.
+(fonction reference_price de track.py) : Cardmarket moyenne 7 jours si elle existe,
+sinon Cardmarket tendance, sinon TCGplayer converti en euros.
 """
 import csv
 import json
@@ -20,6 +20,7 @@ PAGE_IDS = {
     "me05-116": "mega-darkrai-116",
 }
 SOURCE_LABELS = {
+    "Cardmarket moyenne 7 j": "Cardmarket, moyenne 7 jours (relevé GitHub)",
     "Cardmarket tendance": "Cardmarket, cote tendance (relevé GitHub)",
 }
 
@@ -30,6 +31,8 @@ def card_id(row):
 
 
 def reference(prices):
+    if "Cardmarket moyenne 7 j" in prices:
+        return "Cardmarket moyenne 7 j", prices["Cardmarket moyenne 7 j"]
     if "Cardmarket tendance" in prices:
         return "Cardmarket tendance", prices["Cardmarket tendance"]
     for source, value in prices.items():
@@ -56,23 +59,26 @@ def main():
     out = {}
     for cid, page_id in PAGE_IDS.items():
         days = by_day.get(cid, {})
-        history, last_source, avg30 = [], None, None
+        history, last_source, avg30, avg7 = [], None, None, None
         for day in sorted(days):
             source, value = reference(days[day])
             if value is None:
                 continue
-            history.append({"d": day, "v": round(value, 2)})
+            history.append({"d": day, "v": round(value, 2), "s": source})
             last_source = source
-            avg30 = days[day].get("Cardmarket moyenne 30 j", avg30 if source == "Cardmarket tendance" else None)
+            avg30 = days[day].get("Cardmarket moyenne 30 j", avg30 if source.startswith("Cardmarket") else None)
+            avg7 = days[day].get("Cardmarket moyenne 7 j")
         if not history:
             continue
+        # Courbe homogène : on ne garde que les relevés de la même source que le dernier
+        history = [{"d": h["d"], "v": h["v"]} for h in history if h["s"] == last_source]
         label = SOURCE_LABELS.get(last_source) or "TCGplayer, prix marché converti en € (relevé GitHub)"
         out[page_id] = {
             "history": history,
             "source": label,
             "target": targets.get(cid),
             "avg30": round(avg30, 2) if avg30 is not None else {"__delete__": True},
-            "avg7": {"__delete__": True},
+            "avg7": round(avg7, 2) if avg7 is not None else {"__delete__": True},
             "lowFrNm": {"__delete__": True},
             "fx": {"__delete__": True},
         }
