@@ -145,9 +145,11 @@ def extract_prices_eur(card, usd_eur):
 
 # ---------- Source 2 : TCGdex (secours, gratuit, sans clé) ----------
 def tcgdex_get(url):
+    # En-tête navigateur : sans lui, TCGdex renvoie parfois une fiche sans prix
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (pokemon-watch)", "Cache-Control": "no-cache"})
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(url, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 return json.load(resp)
         except Exception as exc:
             print(f"TCGdex : tentative {attempt + 1} échouée ({url}) : {exc}")
@@ -199,6 +201,14 @@ def tcgdex_card_prices(row, usd_eur):
     listing_id = card["id"]
     detail = tcgdex_get(TCGDEX_URL + "/" + urllib.parse.quote(str(listing_id)))
     pricing = (detail or {}).get("pricing") or {}
+    if not pricing.get("cardmarket"):
+        print(f"TCGdex : pas de prix Cardmarket pour {listing_id} en anglais, essai en français")
+        detail_fr = tcgdex_get(TCGDEX_URL.replace("/en/", "/fr/") + "/" + urllib.parse.quote(str(listing_id)))
+        pricing_fr = (detail_fr or {}).get("pricing") or {}
+        if pricing_fr.get("cardmarket"):
+            pricing = pricing_fr
+        else:
+            print(f"TCGdex : toujours aucun prix Cardmarket pour {listing_id}")
     prices = {}
     cm = pricing.get("cardmarket") or {}
     if cm.get("unit", "EUR") == "EUR":
