@@ -203,12 +203,16 @@ def tcgdex_card_prices(row, usd_eur):
     pricing = (detail or {}).get("pricing") or {}
     if not pricing.get("cardmarket"):
         print(f"TCGdex : pas de prix Cardmarket pour {listing_id} en anglais, essai en français")
-        detail_fr = tcgdex_get(TCGDEX_URL.replace("/en/", "/fr/") + "/" + urllib.parse.quote(str(listing_id)))
-        pricing_fr = (detail_fr or {}).get("pricing") or {}
-        if pricing_fr.get("cardmarket"):
-            pricing = pricing_fr
+        for alt_url in (
+            TCGDEX_URL.replace("/en/", "/fr/") + "/" + urllib.parse.quote(str(listing_id)),
+            TCGDEX_URL + "/" + urllib.parse.quote(str(listing_id)) + f"?nocache={int(time.time())}",
+        ):
+            alt_pricing = (tcgdex_get(alt_url) or {}).get("pricing") or {}
+            if alt_pricing.get("cardmarket"):
+                pricing = alt_pricing
+                break
         else:
-            print(f"TCGdex : toujours aucun prix Cardmarket pour {listing_id}")
+            print(f"TCGdex : toujours aucun prix Cardmarket pour {listing_id}. Reçu : {json.dumps((detail or {}).get('pricing'))[:300]}")
     prices = {}
     cm = pricing.get("cardmarket") or {}
     if cm.get("unit", "EUR") == "EUR":
