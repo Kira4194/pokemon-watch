@@ -1,22 +1,30 @@
 {
   "summary": {
     "30th-154": {
-      "TCGplayer (via PokemonPriceTracker, converti)": 65.6145204
+      "Cardmarket moyenne 7 j": 68.41,
+      "Cardmarket tendance": 58.68,
+      "Cardmarket moyenne 30 j": 89.35
     },
     "30th-158": {
-      "TCGplayer (via PokemonPriceTracker, converti)": 40.517188919999995
+      "Cardmarket moyenne 7 j": 44.23,
+      "Cardmarket tendance": 36.43,
+      "Cardmarket moyenne 30 j": 55.11
     },
     "30th-153": {
-      "TCGplayer (via PokemonPriceTracker, converti)": 37.62373992
+      "Cardmarket moyenne 7 j": 32.14,
+      "Cardmarket tendance": 29.34,
+      "Cardmarket moyenne 30 j": 43.85
     },
     "30th-152": {
-      "TCGplayer (via PokemonPriceTracker, converti)": 75.10503312
+      "Cardmarket moyenne 7 j": 93.19,
+      "Cardmarket tendance": 79.08,
+      "Cardmarket moyenne 30 j": 118.57
     },
     "me05-116": {
-      "Cardmarket moyenne 7 j": 197.68,
-      "Cardmarket tendance": 177.93,
-      "Cardmarket moyenne 30 j": 195.96,
-      "TCGplayer holofoil (converti)": 121.87207187999998
+      "TCGplayer holofoil (converti)": 121.87207187999998,
+      "Cardmarket moyenne 7 j": 194.15,
+      "Cardmarket tendance": 174.26,
+      "Cardmarket moyenne 30 j": 194.48
     }
   },
   "targets": {
