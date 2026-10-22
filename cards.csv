@@ -1,6 +1,6 @@
-nom,nom_anglais,numero,mot_set,id,prix_bas,prix_haut
-Ectoplasma ex 30e anniversaire 154/128,Gengar ex,154,30th,,,300
-Mew ex 30e anniversaire 158/128,Mew ex,158,30th,,,300
-Nymphali ex 30e anniversaire 153/128,Sylveon ex,153,30th,,,250
-Mew ex 30e anniversaire 152/128,Mew ex,152,30th,,,200
-Méga Darkrai ex Nuit Noire 116/84,Mega Darkrai ex,116,Pitch Black,,,300
+nom,nom_anglais,numero,mot_set,id,prix_bas,prix_haut,cardmarket_id
+Ectoplasma ex 30e anniversaire 154/128,Gengar ex,154,30th,,,300,908355
+Mew ex 30e anniversaire 158/128,Mew ex,158,30th,,,300,907762
+Nymphali ex 30e anniversaire 153/128,Sylveon ex,153,30th,,,250,907758
+Mew ex 30e anniversaire 152/128,Mew ex,152,30th,,,200,908354
+Méga Darkrai ex Nuit Noire 116/84,Mega Darkrai ex,116,Pitch Black,,,300,895901

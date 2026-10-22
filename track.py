@@ -5,9 +5,11 @@
   par rapport au dernier récapitulatif envoyé, avec le prix PSA 10.
 
 Sources de prix, dans l'ordre :
-1. API Pokémon TCG (Cardmarket en € + TCGplayer en $)
-2. TCGdex (secours si la 1re n'a pas encore de prix pour la carte)
-3. PokemonPriceTracker (second secours, prix TCGplayer, nécessite une clé)
+1. Guide des prix Cardmarket (fichier public quotidien, en €), via la colonne
+   cardmarket_id de cards.csv : moyenne 7 jours, tendance, moyenne 30 jours
+2. TCGdex (prix TCGplayer, et Cardmarket si le guide n'a pas la carte)
+3. API Pokémon TCG (secours, en fin de vie)
+4. PokemonPriceTracker (second secours, prix TCGplayer, nécessite une clé)
 """
 import csv
 import json
@@ -20,6 +22,8 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import cardmarket
+
 CARDS_FILE = Path("cards.csv")
 HISTORY_FILE = Path("history.csv")
 STATE_FILE = Path("state.json")
@@ -31,6 +35,8 @@ FX_URLS = [
     "https://open.er-api.com/v6/latest/USD",
     "https://api.exchangerate-api.com/v4/latest/USD",
 ]
+# Mot du set dans cards.csv -> code du set (sert d'identifiant de carte, ex. 30th-154)
+SET_CODES = {"30th": "30th", "Pitch Black": "me05"}
 
 API_KEY = os.environ.get("POKEMONTCG_API_KEY", "")
 PPT_URL = "https://www.pokemonpricetracker.com/api/v2/cards"
@@ -41,7 +47,7 @@ TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # ---------- Outils ----------
 def fmt_eur(x):
-    s = f"{x:,.2f}".replace(",", "\u202f").replace(".", ",")
+    s = f"{x:,.2f}".replace(",", " ").replace(".", ",")
     return f"{s} €"
 
 
@@ -77,6 +83,18 @@ def save_state(state):
     STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def minimal_card(row):
+    """Fiche minimale quand seules les données Cardmarket sont disponibles."""
+    set_word = (row.get("mot_set") or "").strip()
+    number = (row.get("numero") or "").strip()
+    return {
+        "id": f"{SET_CODES.get(set_word, set_word)}-{number}",
+        "name": (row.get("nom_anglais") or "").strip(),
+        "number": number,
+        "set": {"name": set_word},
+    }
+
+
 # ---------- Taux de change USD -> EUR ----------
 def get_usd_eur_rate():
     """Essaie plusieurs services l'un après l'autre (une adresse GitHub partagée
@@ -90,7 +108,7 @@ def get_usd_eur_rate():
     return None
 
 
-# ---------- Source 1 : API Pokémon TCG ----------
+# ---------- Secours : API Pokémon TCG ----------
 def api_get(url):
     headers = {"X-Api-Key": API_KEY} if API_KEY else {}
     req = urllib.request.Request(url, headers=headers)
@@ -143,7 +161,7 @@ def extract_prices_eur(card, usd_eur):
     return prices
 
 
-# ---------- Source 2 : TCGdex (secours, gratuit, sans clé) ----------
+# ---------- TCGdex (gratuit, sans clé) ----------
 def tcgdex_get(url):
     # En-tête navigateur : sans lui, TCGdex renvoie parfois une fiche sans prix
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (pokemon-watch)", "Cache-Control": "no-cache"})
@@ -158,7 +176,7 @@ def tcgdex_get(url):
 
 
 def find_card_tcgdex(row):
-    """Trouve la carte et ses prix directement via TCGdex (source principale, sans clé)."""
+    """Trouve la carte et ses prix directement via TCGdex (sans clé)."""
     name = (row.get("nom_anglais") or "").strip()
     number = (row.get("numero") or "").strip()
     set_word = (row.get("mot_set") or "").strip().lower()
@@ -193,7 +211,7 @@ def find_card_tcgdex(row):
     return None
 
 
-def tcgdex_card_prices(row, usd_eur):
+def tcgdex_card_prices(row, usd_eur, need_cardmarket=True):
     """Recherche + prix en un appel. Retourne (card, prices) ou (None, {})."""
     card = find_card_tcgdex(row)
     if not card:
@@ -201,7 +219,7 @@ def tcgdex_card_prices(row, usd_eur):
     listing_id = card["id"]
     detail = tcgdex_get(TCGDEX_URL + "/" + urllib.parse.quote(str(listing_id)))
     pricing = (detail or {}).get("pricing") or {}
-    if not pricing.get("cardmarket"):
+    if need_cardmarket and not pricing.get("cardmarket"):
         print(f"TCGdex : pas de prix Cardmarket pour {listing_id} en anglais, essai en français")
         for alt_url in (
             TCGDEX_URL.replace("/en/", "/fr/") + "/" + urllib.parse.quote(str(listing_id)),
@@ -233,7 +251,7 @@ def tcgdex_card_prices(row, usd_eur):
     return card, prices
 
 
-# ---------- Source 3 : PokemonPriceTracker (PSA 10 + prix de secours) ----------
+# ---------- PokemonPriceTracker (PSA 10 + prix de secours) ----------
 def ppt_get(params):
     url = PPT_URL + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {PPT_KEY}"})
@@ -371,6 +389,7 @@ def main():
 
     state = load_state()
     usd_eur = get_usd_eur_rate()
+    guide_date, _ = cardmarket.load_price_guide()
 
     with CARDS_FILE.open(newline="", encoding="utf-8") as f:
         cards = [r for r in csv.DictReader(f) if (r.get("nom") or "").strip()]
@@ -382,8 +401,18 @@ def main():
         label = row["nom"].strip()
         fallback_note = None
 
-        # Source principale : TCGdex (gratuite, sans clé, activement maintenue)
-        card, prices = tcgdex_card_prices(row, usd_eur)
+        # Source principale : guide des prix Cardmarket (fichier officiel, quotidien, gratuit)
+        cm_prices = cardmarket.product_prices(row.get("cardmarket_id"))
+        if row.get("cardmarket_id") and not cm_prices:
+            print(f"Guide Cardmarket : pas de prix pour {label} (produit {row.get('cardmarket_id')})")
+
+        # TCGdex : fiche de la carte et prix TCGplayer (et Cardmarket si le guide n'a rien)
+        card, prices = tcgdex_card_prices(row, usd_eur, need_cardmarket=not cm_prices)
+        if cm_prices:
+            prices = {k: v for k, v in prices.items() if not k.startswith("Cardmarket")}
+            prices.update(cm_prices)
+            card = card or minimal_card(row)
+            card["cardmarket"] = {**(card.get("cardmarket") or {}), "updatedAt": guide_date or today}
 
         # Secours 1 : API Pokémon TCG (en fin de vie, gardée tant qu'elle répond)
         if not card or not prices:
@@ -467,13 +496,18 @@ def main():
         new_summary[card_id] = prices
         time.sleep(1)
 
-    # Historique complet (un fichier CSV)
-    is_new = not HISTORY_FILE.exists()
-    with HISTORY_FILE.open("a", newline="", encoding="utf-8") as f:
+    # Historique complet (un fichier CSV) : on remplace les lignes du jour si le script
+    # a déjà tourné aujourd'hui, pour ne pas les dupliquer
+    old_rows = []
+    if HISTORY_FILE.exists():
+        with HISTORY_FILE.open(newline="", encoding="utf-8") as f:
+            old_rows = list(csv.reader(f))[1:]
+    done_today = {r[1] for r in history_rows}
+    old_rows = [r for r in old_rows if not (r and r[0] == today and r[1] in done_today)]
+    with HISTORY_FILE.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        if is_new:
-            writer.writerow(["date", "card_id", "name", "source", "price_eur"])
-        writer.writerows(history_rows)
+        writer.writerow(["date", "card_id", "name", "source", "price_eur"])
+        writer.writerows(old_rows + history_rows)
 
     # Alertes de prix cibles : envoyées tout de suite
     for alert in alerts:
