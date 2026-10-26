@@ -31,6 +31,7 @@ PAGE_IDS = {
     "30th-153": "nymphali-153",
     "30th-152": "mew-152",
     "me05-116": "mega-darkrai-116",
+    "me05-115": "mega-lugulabre-115",
 }
 # carte de la vitrine -> (set du Pokédex, numéro n de la carte dans ce set)
 POKEDEX_SLOTS = {
@@ -39,6 +40,7 @@ POKEDEX_SLOTS = {
     "nymphali-153": ("30C", 153),
     "mew-152": ("30C", 152),
     "mega-darkrai-116": ("NN", 116),
+    "mega-lugulabre-115": ("NN", 115),
 }
 SOURCE_LABELS = {
     "Cardmarket moyenne 7 j": "Cardmarket, moyenne 7 jours (relevé GitHub)",
