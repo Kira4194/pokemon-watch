@@ -1,0 +1,30 @@
+name: Brouillon Gmail des prix
+
+# Juste après le relevé quotidien (et à la main si besoin) : range les prix du jour
+# dans un brouillon Gmail. La page « Cote de mes cartes Pokémon » le lit à l'ouverture.
+on:
+  workflow_run:
+    workflows: ["Veille cartes Pokémon"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  brouillon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Déposer les prix du jour dans un brouillon Gmail
+        run: python gmail_draft.py
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
