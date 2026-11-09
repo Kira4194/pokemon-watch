@@ -1,36 +1,43 @@
 {
   "summary": {
     "30th-154": {
-      "Cardmarket moyenne 7 j": 66.12,
-      "Cardmarket tendance": 60.85,
-      "Cardmarket moyenne 30 j": 73.59
+      "Cardmarket moyenne 7 j": 64.97,
+      "Cardmarket tendance": 62.32,
+      "Cardmarket moyenne 30 j": 68.26
     },
     "30th-158": {
-      "Cardmarket moyenne 7 j": 43.13,
-      "Cardmarket tendance": 41.74,
-      "Cardmarket moyenne 30 j": 46.25
+      "TCGplayer holofoil (converti)": 29.8580964,
+      "Cardmarket moyenne 7 j": 42.16,
+      "Cardmarket tendance": 41.08,
+      "Cardmarket moyenne 30 j": 43.66
     },
     "30th-153": {
-      "Cardmarket moyenne 7 j": 32.58,
-      "Cardmarket tendance": 30.41,
-      "Cardmarket moyenne 30 j": 36.48
+      "TCGplayer holofoil (converti)": 30.242267000000002,
+      "Cardmarket moyenne 7 j": 33.62,
+      "Cardmarket tendance": 32.04,
+      "Cardmarket moyenne 30 j": 33.8
     },
     "30th-152": {
-      "Cardmarket moyenne 7 j": 85.67,
-      "Cardmarket tendance": 80.07,
-      "Cardmarket moyenne 30 j": 97.44
+      "Cardmarket moyenne 7 j": 84.09,
+      "Cardmarket tendance": 81.84,
+      "Cardmarket moyenne 30 j": 90.08
     },
     "me05-116": {
-      "TCGplayer holofoil (converti)": 121.07957099999999,
-      "Cardmarket moyenne 7 j": 180.02,
-      "Cardmarket tendance": 169.05,
-      "Cardmarket moyenne 30 j": 184.05
+      "TCGplayer holofoil (converti)": 118.33347899999998,
+      "Cardmarket moyenne 7 j": 172.3,
+      "Cardmarket tendance": 168.34,
+      "Cardmarket moyenne 30 j": 179.55
     },
     "me05-115": {
-      "TCGplayer holofoil (converti)": 27.061399499999997,
-      "Cardmarket moyenne 7 j": 22.4,
-      "Cardmarket tendance": 23.03,
-      "Cardmarket moyenne 30 j": 26.29
+      "TCGplayer holofoil (converti)": 25.292720199999998,
+      "Cardmarket moyenne 7 j": 25.32,
+      "Cardmarket tendance": 23.87,
+      "Cardmarket moyenne 30 j": 25.07
+    },
+    "30th-85": {
+      "Cardmarket moyenne 7 j": 29.68,
+      "Cardmarket tendance": 29.97,
+      "Cardmarket moyenne 30 j": 25.64
     }
   },
   "targets": {
@@ -39,7 +46,8 @@
     "30th-153": "between",
     "30th-152": "between",
     "me05-116": "between",
-    "me05-115": "between"
+    "me05-115": "between",
+    "30th-85": "between"
   },
   "ppt_ids": {
     "30th-154": "717610",
@@ -47,6 +55,7 @@
     "30th-153": "716231",
     "30th-152": "717605",
     "me05-116": "704873",
-    "me05-115": "704872"
+    "me05-115": "704872",
+    "30th-85": "716196"
   }
 }
