@@ -1,6 +1,6 @@
 {
- "date": "2026-11-23",
- "guide_date": "2026-11-23",
+ "date": "2026-11-24",
+ "guide_date": "2026-11-24",
  "source": "Cardmarket, prix de vente moyen (guide des prix officiel, relevé GitHub)",
  "sets": {
   "30C": {
@@ -504,7 +504,7 @@
    "183": 23.41,
    "184": 42.46,
    "185": 16.7,
-   "186": 20.0,
+   "186": 19.04,
    "187": 149.22,
    "188": 169.82
   }
